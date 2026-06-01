@@ -12,7 +12,7 @@ from models.ECLC1 import ECLC1
 from models.baselines import GaussianKernelJacobian, MarkovRandomWalk
 
 
-# ================= 数据生成引擎 =================
+# ================= Data Generation Engine =================
 def compute_vertex_normals(coords, simplices, center_guides=None):
     normals = np.zeros_like(coords)
     v0, v1, v2 = coords[simplices[:, 0]], coords[simplices[:, 1]], coords[simplices[:, 2]]
@@ -106,7 +106,7 @@ def generate_torus(n_u=60, n_v=30, noise_std=0.8):
     return coords, apply_noise(coords, V_inj, normals, noise_std), normals, simplices
 
 
-# ================= 统一制图引擎 =================
+# ================= Unified Plotting Engine =================
 def plot_manifold_subplot(ax, coords, simplices, V_plot, sings, title, elev, azim):
     ax.set_title(title, fontsize=20, fontweight='bold', pad=8)
     ax.plot_trisurf(coords[:, 0], coords[:, 1], coords[:, 2], triangles=simplices, color='whitesmoke', alpha=0.3,
@@ -145,10 +145,10 @@ def plot_manifold_subplot(ax, coords, simplices, V_plot, sings, title, elev, azi
 
 def main():
     print("=" * 80)
-    print(" SimExp 1 Compare: 跨界方法盲测对比 (ECL vs Spatial Stats vs Graph ML)")
+    print(" SimExp 1 Compare: Cross-Paradigm Blind Benchmarking (ECL vs Spatial Stats vs Graph ML)")
     print("=" * 80)
 
-    # 1. 实例化三大门派算法
+    # 1. Instantiate the three methodological paradigms
     stat_baseline = GaussianKernelJacobian(bandwidth=0.35, speed_threshold=0.25)
     ml_baseline = MarkovRandomWalk(beta=15.0, top_percentile=98.5)
     ecl_model = ECLC1(tau=2.0, cooling_iterations=15, dt=0.2, fdr_alpha=0.05)
@@ -161,35 +161,35 @@ def main():
     fig = plt.figure(figsize=(24, 11))
 
     for name, generator, elev, azim, row_idx in datasets:
-        print(f"\n[*] 激荡流形: {name} ($\sigma=0.8$) ...")
+        print(f"\n[*] Evaluating on perturbed manifold: {name} (sigma=0.8) ...")
         coords, V_noisy, normals, simplices = generator()
 
-        print("  -> [Baseline 1] Gaussian Jacobian (统计平滑求导派)...")
+        print("  -> [Baseline 1] Gaussian Jacobian (Spatial Statistics: Smoothing & Derivatives)...")
         _, sings_stat, V_smooth, _ = stat_baseline.fit(coords, V_noisy, normals, simplices)
 
-        print("  -> [Baseline 2] Markov Random Walk (图机器学习派)...")
+        print("  -> [Baseline 2] Markov Random Walk (Graph Machine Learning: Transition Probabilities)...")
         _, sings_ml, _, _ = ml_baseline.fit(coords, V_noisy, normals, simplices)
 
-        print("  -> [Proposed] ECL-c1 (代数拓扑与经验假设检验)...")
+        print("  -> [Proposed] ECL-c1 (Algebraic Topology & Empirical Hypothesis Testing)...")
         _, sings_ecl, V_cooled, _ = ecl_model.fit(coords, V_noisy, normals, simplices)
 
-        # 列 1: Raw
+        # Column 1: Raw
         ax1 = fig.add_subplot(2, 4, row_idx * 4 + 1, projection='3d')
         plot_manifold_subplot(ax1, coords, simplices, V_noisy, [], f"{name}\n1. Raw Noisy Vector Field", elev, azim)
 
-        # 列 2: Stats
+        # Column 2: Stats
         ax2 = fig.add_subplot(2, 4, row_idx * 4 + 2, projection='3d')
         plot_manifold_subplot(ax2, coords, simplices, V_smooth, sings_stat,
                               f"2. Spatial Stats (Gaussian+Jacobian)\nIdentified N={len(sings_stat)}",
                               elev, azim)
 
-        # 列 3: ML
+        # Column 3: ML
         ax3 = fig.add_subplot(2, 4, row_idx * 4 + 3, projection='3d')
         plot_manifold_subplot(ax3, coords, simplices, V_noisy, sings_ml,
                               f"3. Graph ML (Markov Walk)\nIdentified N={len(sings_ml)}", elev,
                               azim)
 
-        # 列 4: ECL
+        # Column 4: ECL
         ax4 = fig.add_subplot(2, 4, row_idx * 4 + 4, projection='3d')
         plot_manifold_subplot(ax4, coords, simplices, V_cooled, sings_ecl,
                               f"4. Ours (ECL Framework)\nIdentified N={len(sings_ecl)}", elev, azim)
@@ -197,7 +197,7 @@ def main():
     plt.tight_layout()
     save_path = os.path.join(os.path.dirname(__file__), 'simexp1_compare.pdf')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"\n[*] 世纪对决大图已出炉！请审阅: {save_path}")
+    print(f"\n[*] Comparative benchmarking plot successfully generated. Saved to: {save_path}")
     plt.show()
 
 
