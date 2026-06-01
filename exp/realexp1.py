@@ -11,19 +11,21 @@ try:
     import scvelo as scv
     import scanpy as sc
 except ImportError:
-    print("[!] 缺少生物信息学依赖库，请运行: pip install scvelo scanpy")
+    print("[!] Missing bioinformatics dependencies. Please run: pip install scvelo scanpy")
     sys.exit(1)
 
-# 引入我们的降维打击核武器 ECL-c1
+# Import the core ECL-c1 statistical topological framework
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models.ECLC1 import ECLC1
 
 
 def get_manifold_simplices(coords_2d, percentile=97):
     """
-    【关键几何正则化：流形剪枝】
-    单细胞 UMAP 投影本质上是非凸的散乱点云。传统的 Delaunay 剖分会跨越 UMAP 上的“聚类空白带”
-    生成极长的伪边缘。我们通过边长分位数截断，还原出只在细胞稠密区连接的真实拓扑流形。
+    [Crucial Geometric Regularization: Manifold Pruning]
+    Single-cell UMAP projections are inherently non-convex scattered point clouds. 
+    Traditional Delaunay triangulation bridges "empty gaps" between clusters, generating 
+    extremely long spurious edges. We apply a strictly percentile-based edge-length truncation 
+    to reconstruct the true topological manifold strictly within dense cellular regions.
     """
     tri = Delaunay(coords_2d)
     simplices = tri.simplices
@@ -41,7 +43,10 @@ def get_manifold_simplices(coords_2d, percentile=97):
 
 
 def fix_orientation(coords, simplices, normals):
-    """固定单纯形的法线朝向 (确保 Z 轴向上，满足右手螺旋定则)"""
+    """
+    Fix the normal orientation of simplices 
+    (Ensure Z-axis points upwards, satisfying the right-hand rule for consistent flux integration).
+    """
     simplices = np.copy(simplices)
     for i in range(len(simplices)):
         p0, p1, p2 = coords[simplices[i, 0]], coords[simplices[i, 1]], coords[simplices[i, 2]]
@@ -52,14 +57,14 @@ def fix_orientation(coords, simplices, normals):
 
 
 def prepare_pancreas_data():
-    print("[*] 正在下载并处理单细胞胰腺发育数据集 (Pancreas Dataset)...")
-    print("    (采用 Scanpy 原生管线硬核预处理，规避一切 API 弃用报错)")
+    print("[*] Downloading and processing the single-cell Pancreas developmental dataset...")
+    print("    (Using native Scanpy pipeline for robust preprocessing to avoid API deprecation issues)")
     scv.settings.verbosity = 1
 
-    # 1. 加载内置数据集 (通常自带 X_umap 和 clusters 标签)
+    # 1. Load built-in dataset (typically includes X_umap and clusters labels)
     adata = scv.datasets.pancreas()
 
-    # 2. 基因过滤与数学归一化 (防弹级混用)
+    # 2. Gene filtering and mathematical normalization (Robust pipeline)
     scv.pp.filter_genes(adata, min_shared_counts=20)
     scv.pp.normalize_per_cell(adata)
     sc.pp.log1p(adata)
@@ -68,22 +73,22 @@ def prepare_pancreas_data():
     except Exception:
         sc.pp.highly_variable_genes(adata, n_top_genes=2000, flavor='cell_ranger')
 
-    # 3. 拓扑降维与近邻图构建 (强制移交给底层 scanpy 处理)
+    # 3. Topological dimensionality reduction and KNN graph construction
     sc.pp.pca(adata)
     sc.pp.neighbors(adata, n_pcs=30, n_neighbors=30)
 
-    # scvelo 0.4.0 移除了 scv.tl.umap，必须使用 scanpy.tl.umap
-    # 且只有在数据集没有自带 umap 时才重新计算，保留经典论文视角
+    # scvelo 0.4.0 removed scv.tl.umap; strictly fallback to scanpy.tl.umap
+    # Only recompute if X_umap is missing to preserve the classic paper perspective.
     if 'X_umap' not in adata.obsm:
         sc.tl.umap(adata)
 
-    # 4. RNA 动力学推断 (scVelo 本职物理工作)
-    # 此时 neighbors 已经由 scanpy 算好，传 None 自动继承
+    # 4. RNA dynamics inference (scVelo's core physics engine)
+    # KNN graph is already computed by scanpy; passing None to inherit automatically
     scv.pp.moments(adata, n_pcs=None, n_neighbors=None)
     scv.tl.velocity(adata)
     scv.tl.velocity_graph(adata)
 
-    # 5. 流场嵌入 (在 UMAP 上生成 2D 向量场)
+    # 5. Flow field embedding (generate 2D vector field on the UMAP manifold)
     scv.tl.velocity_embedding(adata, basis='umap')
 
     return adata
@@ -91,18 +96,18 @@ def prepare_pancreas_data():
 
 def main():
     print("=" * 80)
-    print(" RealExp1: ECL 框架在真实单细胞 RNA 速率场中的降维打击 (Pancreas)")
+    print(" RealExp1: ECL Framework on Real Single-Cell RNA Velocity Fields (Pancreas)")
     print("=" * 80)
 
-    # 1. 获取并处理数据
+    # 1. Acquire and process data
     adata = prepare_pancreas_data()
 
-    # 2. 提取经验底空间与观测场
-    # UMAP 是 2D 的，为了适配 ECLC1 统一的三维几何引擎，我们给 Z 轴补 0
+    # 2. Extract empirical base space and observation field
+    # UMAP is 2D; to adapt to ECLC1's unified 3D geometric engine, we pad the Z-axis with 0
     umap_coords = adata.obsm['X_umap']
     V_umap = adata.obsm['velocity_umap']
 
-    # 剔除由于技术误差导致速度估计为 NaN 的无效细胞
+    # Remove invalid cells with NaN velocity estimates due to sequencing dropouts
     valid_mask = ~np.isnan(V_umap).any(axis=1)
     umap_coords = umap_coords[valid_mask]
     V_umap = V_umap[valid_mask]
@@ -111,57 +116,59 @@ def main():
     coords = np.column_stack((umap_coords, np.zeros(N)))
     V = np.column_stack((V_umap, np.zeros(N)))
 
-    # 强制归一化流场：提取纯粹的相位差信息，屏蔽速率幅度的极度异方差干扰
+    # Force flow field L2-normalization: Extract pure phase difference information, 
+    # structurally shielding against extreme heteroscedasticity in velocity amplitudes.
     norms = np.linalg.norm(V, axis=1, keepdims=True)
     V_normalized = np.where(norms > 1e-8, V / norms, np.zeros_like(V))
 
-    # 构造法线与三角面 (平面流形的法线统一为 [0, 0, 1])
+    # Construct normals and triangular simplices (planar manifold normals are uniformly [0, 0, 1])
     normals = np.zeros((N, 3))
     normals[:, 2] = 1.0
     simplices = get_manifold_simplices(umap_coords, percentile=96)
     simplices = fix_orientation(coords, simplices, normals)
 
-    print(f"\n[*] 经验底空间构造完成: {len(coords)} 个细胞节点, {len(simplices)} 个三角单纯形")
+    print(f"\n[*] Empirical base space constructed: {len(coords)} cell nodes, {len(simplices)} triangular simplices")
 
     # =====================================================================
-    # 核心高光时刻：调用 ECL 模型！
-    # 因为单细胞基因测序数据极其嘈杂，我们适度增加冷却迭代与相消阈值，并坚持 FDR=0.05！
+    # Core Execution: Invoke the ECL model
+    # Due to severe transcriptomic sequencing noise, we slightly increase the 
+    # cooling iterations and annihilation radius, strictly enforcing FDR=0.05.
     # =====================================================================
     model = ECLC1(tau=3.0, cooling_iterations=30, dt=0.2, fdr_alpha=0.05)
 
-    print("\n[*] 正在启动 ECL-c1 统计拓扑推断引擎...")
+    print("\n[*] Initializing the ECL-c1 Statistical Topological Inference Engine...")
     c1_filtered, final_sings, V_cooled, raw_sings = model.fit(coords, V_normalized, normals, simplices)
 
-    print(f"\n" + "=" * 40 + " 推断战报 " + "=" * 40)
-    print(f"👻 [微观幻觉] Stage 1 纯代数算子在测序噪声中迷失，识别出了 {len(raw_sings)} 个高频量子涨落。")
-    print(f"🌟 [宏观本源] Stage 2 统计相消与泊松零浴洗礼后，仅保留了 {len(final_sings)} 个具备绝对显著性的生命奇点！")
+    print(f"\n" + "=" * 40 + " Inference Report " + "=" * 40)
+    print(f"[Microscopic Illusions] Stage 1 naive algebraic operator got overwhelmed by sequencing noise, extracting {len(raw_sings)} high-frequency phase slips.")
+    print(f"[Macroscopic Truth] Stage 2 spatial Poisson null bath and statistical annihilation strictly preserved {len(final_sings)} highly significant biological singularities!")
 
     for pt, chg, pval in final_sings:
-        pt_type = "干细胞起源 (+1 Source)" if chg > 0 else "终末分化状态 (-1 Sink/Saddle)"
-        print(f"    => {pt_type}: 坐标({pt[0]:.2f}, {pt[1]:.2f}) | Poisson P-value = {pval:.2e}")
+        pt_type = "Developmental Origin (+1 Source)" if chg > 0 else "Terminal Fate / Lineage Bifurcation (-1 Sink/Saddle)"
+        print(f"    => {pt_type}: Coordinates({pt[0]:.2f}, {pt[1]:.2f}) | Poisson P-value = {pval:.2e}")
     print("=" * 90)
 
     # =====================================================================
-    # 绘制顶刊级对比图表
+    # Render publication-quality comparative figures
     # =====================================================================
-    print("\n[*] 正在渲染对比图表...")
+    print("\n[*] Rendering comparative figures...")
     fig, axes = plt.subplots(1, 3, figsize=(24, 7))
     plt.subplots_adjust(wspace=0.1)
 
-    # 获取细胞颜色 (生物学 Ground Truth)
+    # Retrieve biological ground truth cell colors
     clusters = adata.obs['clusters'][valid_mask]
     cluster_names = adata.obs['clusters'].cat.categories
     cluster_colors = adata.uns['clusters_colors'] if 'clusters_colors' in adata.uns else plt.cm.tab20.colors
     color_map = {name: color for name, color in zip(cluster_names, cluster_colors)}
     cell_colors = [color_map[c] for c in clusters]
 
-    # --- 图 1: 传统生物学流线图 (Ground Truth) ---
+    # --- Plot 1: Classical Biological Streamplot (Ground Truth) ---
     ax1 = axes[0]
     scv.pl.velocity_embedding_stream(adata, basis='umap', color='clusters',
                                      title="", ax=ax1, show=False, legend_loc='best', alpha=0.5)
     ax1.set_title(f"1. Biological Ground Truth\n(scVelo Streamplot)", fontsize=20, fontweight='bold', pad=15)
 
-    # --- 图 2: Stage 1 Naive DEC 的灾难现场 ---
+    # --- Plot 2: Stage 1 Naive DEC (The Noise-dominated Disaster) ---
     ax2 = axes[1]
     ax2.set_title(f"2. Stage 1: Naive DEC (Zero Statistical Tolerance)\nFalse Illusions N={len(raw_sings)}",
                   fontsize=20, fontweight='bold', pad=15)
@@ -175,7 +182,7 @@ def main():
                     label='Micro Sink (-1)')
     ax2.legend(loc='lower left', frameon=True)
 
-    # --- 图 3: ECL-c1 统计拓扑绝杀 ---
+    # --- Plot 3: Stage 2 ECL-c1 Statistical Topological Inference ---
     ax3 = axes[2]
     net_c1 = sum([chg for _, chg, _ in final_sings])
     ax3.set_title(
@@ -203,22 +210,22 @@ def main():
         for pt, chg, pval in final_sings:
             p_text = "P~0" if pval < 1e-6 else f"P={pval:.1e}"
 
-            # 智能排版与生物学纠错：利用 UMAP 大局观（右侧起点，左侧终点），一上一下，一左一右推开
+            # Smart layout adjustment based on UMAP macro structure
             if chg > 0:
-                if pt[0] > mid_x:  # 位于流形右侧的干细胞集群 (Ductal)
+                if pt[0] > mid_x:  # Progenitor stem cells on the right (Ductal)
                     label_text = "Origin (+1)"
-                    x_off = max_range_x * 0.08  # 标签往右推
-                    y_off = max_range_y * 0.06  # 标签往上拉
-                else:  # 位于流形左侧的终末归宿 (Alpha/Beta)
+                    x_off = max_range_x * 0.08  
+                    y_off = max_range_y * 0.06  
+                else:  # Terminal fate on the left (Alpha/Beta)
                     label_text = "Fate (+1)"
-                    x_off = max_range_x * 0.08  # 标签往右推
-                    y_off = -max_range_y * 0.08  # 标签往下沉（彻底避开左侧的鞍点！）
-            else:  # 位于中左侧的分岔口 Bifurcation (-1)
+                    x_off = max_range_x * 0.08  
+                    y_off = -max_range_y * 0.08  
+            else:  # Lineage Bifurcation in the middle-left
                 label_text = "Bifurcation (-1)"
-                x_off = -max_range_x * 0.10  # 标签向左推
-                y_off = max_range_y * 0.06  # 标签向上拉
+                x_off = -max_range_x * 0.10  
+                y_off = max_range_y * 0.06  
 
-            # 采用顶级排版的 annotate（带箭头的引线），文字框不再紧贴奇点
+            # Premium annotation formatting with arrow leads
             ax3.annotate(f"{label_text}\n({p_text})",
                          xy=(pt[0], pt[1]),
                          xytext=(pt[0] + x_off, pt[1] + y_off),
@@ -227,37 +234,33 @@ def main():
                          bbox=dict(facecolor='white', alpha=0.95, edgecolor='gray', boxstyle='round,pad=0.3'),
                          zorder=100, ha='center', va='center')
 
-    # 统一视野边界
+    # Unify viewport boundaries
     for ax in [ax1, ax2, ax3]:
-        ax.set_xticks([]);
-        ax.set_yticks([])
-        ax.spines['top'].set_visible(False);
-        ax.spines['right'].set_visible(False)
-        ax.spines['bottom'].set_visible(False);
-        ax.spines['left'].set_visible(False)
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False); ax.spines['left'].set_visible(False)
         if ax != ax1:
-            ax.set_xlim(ax1.get_xlim());
-            ax.set_ylim(ax1.get_ylim())
+            ax.set_xlim(ax1.get_xlim()); ax.set_ylim(ax1.get_ylim())
 
     # =====================================================================
-    # 🔬 定量佐证：用物理坐标反查生物学金标准
+    # 🔬 Quantitative Validation: Cross-referencing physical coords with Ground Truth
     # =====================================================================
     print("\n" + "=" * 80)
-    print(" 终极定量佐证：拓扑奇点与真实生物学标签的完美交汇")
+    print(" Ultimate Quantitative Validation: Perfect intersection of topological singularities and biological labels")
     print("=" * 80)
 
     scv.tl.velocity_pseudotime(adata)
     pseudotime = adata.obs['velocity_pseudotime'].values
     clusters = adata.obs['clusters'].values
 
-    print(f"{'拓扑推断物理属性':<22} | {'靶中真实细胞类别 (GT)':<22} | {'发育伪时间 (0~1)'}")
-    print("-" * 75)
+    print(f"{'Inferred Topological State':<30} | {'Biological Ground Truth (Cell Type)':<35} | {'Pseudotime (0~1)'}")
+    print("-" * 90)
 
     for i, (pt, chg, pval) in enumerate(final_sings):
         dists = np.linalg.norm(umap_coords - pt[:2], axis=1)
         nearest_idx = np.argmin(dists)
 
-        # 获取奇点周围 15 个近邻细胞的向量，计算物理散度 (判断流入还是流出)
+        # Compute physical divergence using the 15 nearest neighbor cells to determine inflow/outflow
         neighbor_indices = np.argsort(dists)[1:16]
         divergence = 0
         for n_idx in neighbor_indices:
@@ -267,21 +270,21 @@ def main():
 
         if chg > 0:
             if divergence > 0:
-                role = "🎯 生命起源 (Source +1)"
+                role = "Developmental Origin (Source +1)"
             else:
-                role = "🛑 终末归宿 (Sink +1)"
+                role = "Terminal Fate (Sink +1)"
         else:
-            role = "✂️ 命运分岔 (Saddle -1)"
+            role = "Lineage Bifurcation (Saddle -1)"
 
         cell_type = str(clusters[nearest_idx])
         ptime = pseudotime[nearest_idx]
-        print(f"{role:<20} | {cell_type:<25} | {ptime:.3f}")
-    print("=" * 75)
+        print(f"{role:<30} | {cell_type:<35} | {ptime:.3f}")
+    print("=" * 90)
 
     plt.tight_layout()
     save_path = os.path.join(os.path.dirname(__file__), 'realexp1_scvelo_pancreas.pdf')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"\n[*] 实战图表已成功保存至: {save_path}")
+    print(f"\n[*] Real-world empirical chart successfully saved to: {save_path}")
     plt.show()
 
 
