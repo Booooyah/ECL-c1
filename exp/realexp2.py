@@ -9,15 +9,15 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-# 引入 ECL 核心模型
+# Import the core ECL framework
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models.ECLC1 import ECLC1
 
 
 def load_multiday_data(csv_path="data/ocean_5days.csv"):
-    print(f"[*] 正在加载连续 5 天的海洋时空数据: {csv_path} ...")
+    print(f"[*] Loading continuous 5-day spatiotemporal oceanographic data: {csv_path} ...")
     if not os.path.exists(csv_path):
-        print(f"[!] 找不到文件 {csv_path}！请按指引下载并重命名。")
+        print(f"[!] File not found: {csv_path}. Please download and rename the dataset accordingly.")
         sys.exit(1)
 
     df_test = pd.read_csv(csv_path, nrows=5)
@@ -36,25 +36,25 @@ def load_multiday_data(csv_path="data/ocean_5days.csv"):
 
     df = df.dropna(subset=[u_col, v_col, sla_col, time_col])
 
-    # 转换经度并清理
+    # Convert longitude coordinates and clean data
     df[lon_col] = np.where(df[lon_col] > 180, df[lon_col] - 360, df[lon_col])
     return df, time_col, lon_col, lat_col, u_col, v_col, sla_col
 
 
 def main():
     print("=" * 80)
-    print(" RealExp 4 终极时空实证: 涡旋生命周期的物理连贯性追踪")
+    print(" RealExp 4: Empirical Spatiotemporal Validation: Lagrangian Coherence Tracking of Eddy Life Cycles")
     print("=" * 80)
 
     df, t_col, lon_col, lat_col, u_col, v_col, sla_col = load_multiday_data()
     unique_times = sorted(df[t_col].unique())
-    print(f"[*] 成功识别到 {len(unique_times)} 个连续的日期快照。")
+    print(f"[*] Successfully identified {len(unique_times)} continuous daily snapshots.")
 
     all_sings_by_day = []
     first_day_sla = None
     first_day_coords = None
 
-    # ================= 分天独立运行 ECL =================
+    # ================= Independent ECL Execution Per Day =================
     for day_idx, t_val in enumerate(unique_times):
         df_day = df[df[t_col] == t_val]
         lons, lats = df_day[lon_col].values.astype(float), df_day[lat_col].values.astype(float)
@@ -79,15 +79,16 @@ def main():
         norms_v = np.linalg.norm(V, axis=1, keepdims=True)
         V_normalized = np.where(norms_v > 1e-8, V / norms_v, np.zeros_like(V))
 
-        print(f"\n[ Day {day_idx + 1} / {len(unique_times)} ] 正在对 {t_val[:10]} 快照进行毫无历史记忆的独立盲推断...")
-        # 为了看清主轨迹，我们使用稍微严苛的显著性截断
+        print(f"\n[ Day {day_idx + 1} / {len(unique_times)} ] Executing strictly independent spatial inference (zero temporal memory) on snapshot {t_val[:10]}...")
+        
+        # Apply a stringent significance threshold to isolate the primary macroscopic trajectories
         model = ECLC1(tau=3.5, cooling_iterations=35, dt=0.2, fdr_alpha=0.005)
         _, final_sings, _, _ = model.fit(coords, V_normalized, normals, simplices)
 
         all_sings_by_day.append(final_sings)
-        print(f"  -> 提取出 {len(final_sings)} 个宏观结构。")
+        print(f"  -> Extracted {len(final_sings)} macroscopic topological structures.")
 
-    # ================= 渲染时空轨迹神图 =================
+    # ================= Rendering Spatiotemporal Lagrangian Tracking Plot =================
     fig, ax = plt.subplots(figsize=(20, 10), facecolor='white')
     ax.set_facecolor('#0f172a')
     ax.set_aspect('equal')
@@ -97,22 +98,23 @@ def main():
         "Spatiotemporal Coherence Validation: Lagrangian Tracking of Inferred Singularities Over 5 Days\n(Algorithm runs independently per day. Smooth spatial trails physically prove they are massive inertial eddies, not random stochastic noise.)",
         fontsize=20, fontweight='bold', pad=15)
 
-    # 1. 用第一天的 SLA 垫底作为地理参考
-    print("\n[*] 正在渲染 SLA 标量底图 ...")
+    # 1. Render the Day-1 SLA scalar background as geographic reference
+    print("\n[*] Rendering SLA scalar background...")
     grid_x, grid_y = np.mgrid[min(first_day_coords[:, 0]):max(first_day_coords[:, 0]):500j,
     min(first_day_coords[:, 1]):max(first_day_coords[:, 1]):500j]
     grid_sla = griddata((first_day_coords[:, 0], first_day_coords[:, 1]), first_day_sla, (grid_x, grid_y),
                         method='cubic')
 
-    # 稍微调高透明度，让上方的轨迹线更醒目
+    # Adjust transparency to highlight the overlaying Lagrangian trajectories
     contour = ax.contourf(grid_x, grid_y, grid_sla, levels=35, cmap='RdYlBu_r', alpha=0.5)
     cbar = plt.colorbar(contour, ax=ax, fraction=0.02, pad=0.02)
     cbar.set_label('Sea Level Anomaly (m) on Day 1', fontsize=13, fontweight='bold')
 
-    # 2. 绘制时空轨迹 (Lagrangian Tracking)
-    print("[*] 正在进行拉格朗日轨迹连线...")
+    # 2. Plot Spatiotemporal Trajectories (Lagrangian Tracking)
+    print("[*] Computing Lagrangian trajectory connections...")
 
-    # 每天最大允许移动距离（约 60 公里），如果在这个半径内找到了同性电荷，就认为是同一个涡旋在移动
+    # Maximum daily displacement threshold (approx. 60 km). Singularities with identical topological charges 
+    # within this radius are tracked as continuous advection of the same physical structure.
     TRACK_DIST_THRESHOLD = 0.6
 
     for t in range(1, len(all_sings_by_day)):
@@ -122,7 +124,7 @@ def main():
         for curr_s in curr_day_sings:
             pt_curr, chg_curr, _ = curr_s
 
-            # 寻找昨天相同拓扑电荷的最近邻
+            # Locate the nearest neighbor with identical topological charge from the previous day
             candidates = [ps for ps in prev_day_sings if ps[1] == chg_curr]
             if not candidates: continue
 
@@ -132,13 +134,13 @@ def main():
             if dists[min_dist_idx] < TRACK_DIST_THRESHOLD:
                 pt_prev = candidates[min_dist_idx][0]
                 color = 'lime' if chg_curr > 0 else 'fuchsia'
-                # 画出平滑的移动轨迹连线
+                # Render smooth advection trajectory
                 ax.plot([pt_prev[0], pt_curr[0]], [pt_prev[1], pt_curr[1]],
                         color=color, linewidth=2.5, zorder=8, alpha=0.8)
 
-    # 3. 把每一天的奇点散点打上去，用颜色深浅和大小表示时间的流逝
+    # 3. Scatter the daily singularities, utilizing opacity and size to indicate temporal progression
     for day_idx, day_sings in enumerate(all_sings_by_day):
-        # 时间越靠后，星星越亮、越大（展现漂移的方向感）
+        # Later temporal states are rendered larger and more opaque to illustrate drift directionality
         alpha_val = 0.3 + 0.7 * (day_idx / (len(unique_times) - 1))
         size_val = 150 + 80 * (day_idx / (len(unique_times) - 1))
 
@@ -148,7 +150,7 @@ def main():
             ax.scatter(pt[0], pt[1], color=color, s=size_val, marker=marker,
                        edgecolors='black', linewidths=1.0, alpha=alpha_val, zorder=10)
 
-    # 图例
+    # Legends
     ax.scatter([], [], color='lime', s=300, marker='*', edgecolors='black',
                label='Eddy (+1) Trajectories (Day 1 $\\rightarrow$ Day 5)')
     ax.scatter([], [], color='fuchsia', s=150, marker='X', edgecolors='black', label='Saddle (-1) Trajectories')
@@ -160,7 +162,7 @@ def main():
     plt.tight_layout()
     save_path = 'realexp4_trajectories.pdf'
     plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
-    print(f"[*] 令人震撼的时空物理轨迹神图已保存至: {save_path}")
+    print(f"[*] Spatiotemporal physical trajectory plot successfully saved to: {save_path}")
     plt.show()
 
 
