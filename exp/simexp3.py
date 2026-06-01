@@ -8,7 +8,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-# 引入 ECL 核心模型
+# Import the core ECL framework
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models.ECLC1 import ECLC1
 
@@ -131,10 +131,10 @@ def empirical_hypothesis_test(clusters, emp_lambda_opp, alpha=0.05):
 
 def main():
     print("=" * 80)
-    print(" SimExp 5: 终极量化评估 (经验零浴校准 & 物理熔断预警)")
+    print(" SimExp 5: Quantitative Evaluation (Empirical Null Calibration & Diagnostic Circuit Breaker)")
     print("=" * 80)
 
-    # 修改为 1x3 大宽图
+    # 1x3 wide figure configuration
     fig = plt.figure(figsize=(24, 6), facecolor='white')
     model = ECLC1(tau=2.0, cooling_iterations=15, dt=0.2, fdr_alpha=0.05)
 
@@ -142,7 +142,7 @@ def main():
     total_area = model._compute_surface_area(coords_null, simplices_null)
 
     # ================= Exp A =================
-    print("\n[*] 执行 Exp A: 提取【冷却后】的残余奇点，校准经验本底密度...")
+    print("\n[*] Executing Exp A: Extracting residual singularities post-cooling to calibrate empirical null density...")
     distances_r = []
     total_opp_charges = 0
     mc_trials_A = 40
@@ -182,12 +182,12 @@ def main():
     ax1.grid(True, linestyle='--', alpha=0.5)
 
     # ================= Exp B =================
-    print("\n[*] 执行 Exp B: 基于动态经验密度的 FDR 防御与 BKT 密度熔断测试...")
+    print("\n[*] Executing Exp B: Evaluating dynamic FDR control and BKT density-based circuit breaker...")
     noise_levels = np.linspace(0.0, 3.5, 8)
     mc_trials_B = 25
 
     tpr_means, tpr_stds, fdr_means, fdr_stds = [], [], [], []
-    bkt_density_means, bkt_density_stds = [], []  # 🌟 新增：监控原始 BKT 密度！
+    bkt_density_means, bkt_density_stds = [], []  
 
     num_simplices = len(simplices_null)
 
@@ -197,10 +197,10 @@ def main():
             np.random.seed(int(sigma * 100) + trial)
             V_noisy, true_centers = get_dipole_field(coords_null, normals_null, noise_std=sigma)
 
-            # 🌟 核心新增：提取未经任何冷却处理的纯原始伪影密度 (Raw BKT Density)
+            # Extract the raw, un-annihilated artifact density (Raw BKT Density) for phase transition monitoring
             _, raw_sings = model.intrinsic_dec_3d_c1(coords_null, V_noisy, normals_null, simplices_null)
             bkt_density = len(raw_sings) / num_simplices
-            bkt_list.append(bkt_density * 100)  # 转为百分比
+            bkt_list.append(bkt_density * 100)  # Convert to percentage
 
             clusters = extract_cooled_clusters(model, coords_null, V_noisy, normals_null, simplices_null)
             final_sings = empirical_hypothesis_test(clusters, emp_lambda_opp, alpha=0.05)
@@ -274,7 +274,7 @@ def main():
     plt.tight_layout()
     save_path = os.path.join(os.path.dirname(__file__), 'simexp_stats.pdf')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"\n[*] 完美的 1x3 经验统计校准与预警图已生成！请查看: {save_path}")
+    print(f"\n[*] Empirical statistical calibration and diagnostic plot successfully generated. Saved to: {save_path}")
     plt.show()
 
 
