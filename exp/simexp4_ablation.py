@@ -12,7 +12,7 @@ from models.ECLC1 import ECLC1
 from models.baselines import GaussianKernelJacobian, MarkovRandomWalk
 
 
-# ================= 数据生成引擎 =================
+# ================= Data Generation Engine =================
 def fix_orientation(coords, simplices, normals):
     simplices = np.copy(simplices)
     for i in range(len(simplices)):
@@ -122,7 +122,7 @@ def generate_hemisphere(noise_std=0.8):
     return coords, apply_noise(coords, V_inj, normals, noise_std), normals, simplices
 
 
-# ================= 统一制图引擎 =================
+# ================= Unified Plotting Engine =================
 def plot_manifold_subplot(ax, coords, simplices, V_plot, sings, title, elev, azim):
     ax.set_title(title, fontsize=20, fontweight='bold', pad=8)
     ax.plot_trisurf(coords[:, 0], coords[:, 1], coords[:, 2], triangles=simplices, color='whitesmoke', alpha=0.3,
@@ -161,10 +161,10 @@ def plot_manifold_subplot(ax, coords, simplices, V_plot, sings, title, elev, azi
 
 def main():
     print("=" * 80)
-    print(" Ablation Study: 喂给对手完美降噪场 (V_cooled)，看其能否起死回生")
+    print(" Ablation Study: Isolating the Zero-Speed Paradox using an Oracle-Smoothed Phase Field")
     print("=" * 80)
 
-    # 正常参数的基线方法
+    # Instantiate baselines with standard hyperparameters
     stat_baseline = GaussianKernelJacobian(bandwidth=0.35, speed_threshold=0.25)
     ml_baseline = MarkovRandomWalk(beta=15.0, top_percentile=98.5)
     ecl_model = ECLC1(tau=2.0, cooling_iterations=15, dt=0.2, fdr_alpha=0.05)
@@ -177,47 +177,47 @@ def main():
     fig = plt.figure(figsize=(24, 11))
 
     for name, generator, elev, azim, row_idx in datasets:
-        print(f"\n[*] 激荡流形: {name.split(' ')[0]} ($\sigma=0.8$) ...")
+        print(f"\n[*] Evaluating on perturbed manifold: {name.split(' ')[0]} (sigma=0.8) ...")
         coords, V_noisy, normals, simplices = generator()
 
-        # 使用 ECL 生成完美的冷却流场 V_cooled
-        print("  -> [ECL] 生成完美的宏观平滑流场 (V_cooled) ...")
+        # Generate the oracle macroscopic smooth flow field (V_cooled) via ECL L2 phase-projection
+        print("  -> [ECL] Generating the optimal, noise-free macroscopic phase field (V_cooled)...")
         _, sings_ecl, V_cooled, _ = ecl_model.fit(coords, V_noisy, normals, simplices)
 
-        # 🌟 核心杀招：将完美的 V_cooled 喂给传统方法，看它们接不接得住！
-        print("  -> [Ablation 1] 将 V_cooled 喂给 Stats (Gaussian+Jacobian)...")
+        # Core Ablation: Feed the perfect phase-normalized V_cooled to classical methods to expose structural blindness
+        print("  -> [Ablation 1] Feeding V_cooled to Spatial Stats (Gaussian+Jacobian)...")
         _, sings_stat_cooled, V_smooth_cooled, _ = stat_baseline.fit(coords, V_cooled, normals, simplices)
 
-        print("  -> [Ablation 2] 将 V_cooled 喂给 Graph ML (Markov Walk)...")
+        print("  -> [Ablation 2] Feeding V_cooled to Graph ML (Markov Walk)...")
         _, sings_ml_cooled, _, _ = ml_baseline.fit(coords, V_cooled, normals, simplices)
 
-        # 列 1: 展示完美的 V_cooled (证明不是平滑没做好)
+        # Column 1: Display the shared input V_cooled to prove optimal pre-conditioning
         ax1 = fig.add_subplot(2, 4, row_idx * 4 + 1, projection='3d')
         plot_manifold_subplot(ax1, coords, simplices, V_cooled, [], f"{name}\n1. Shared Input: ECL Cooled Field", elev,
                               azim)
 
-        # 列 2: Stats (Cooled Input)
+        # Column 2: Stats (Cooled Input) -> Fails due to Zero-Speed Paradox
         ax2 = fig.add_subplot(2, 4, row_idx * 4 + 2, projection='3d')
         plot_manifold_subplot(ax2, coords, simplices, V_smooth_cooled, sings_stat_cooled,
                               f"2. Stats (Given Cooled Input)\nIdentified N={len(sings_stat_cooled)}",
                               elev, azim)
 
-        # 列 3: ML (Cooled Input)
+        # Column 3: ML (Cooled Input) -> Fails due to structural saddle-blindness
         ax3 = fig.add_subplot(2, 4, row_idx * 4 + 3, projection='3d')
         plot_manifold_subplot(ax3, coords, simplices, V_cooled, sings_ml_cooled,
                               f"3. Graph ML (Given Cooled Input)\nIdentified N={len(sings_ml_cooled)}",
                               elev, azim)
 
-        # 列 4: ECL (Full Framework)
+        # Column 4: ECL (Full Framework)
         ax4 = fig.add_subplot(2, 4, row_idx * 4 + 4, projection='3d')
         plot_manifold_subplot(ax4, coords, simplices, V_cooled, sings_ecl,
                               f"4. Ours (Full ECL Framework)\nIdentified N={len(sings_ecl)}", elev,
                               azim)
 
     plt.tight_layout()
-    save_path = os.path.join(os.path.dirname(__file__), 'simexp3_ablation.pdf')
+    save_path = os.path.join(os.path.dirname(__file__), 'simexp4_ablation.pdf')
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"\n[*] 极其震撼的消融实验大图出炉！请审阅: {save_path}")
+    print(f"\n[*] Ablation study (Zero-Speed Paradox) plot successfully generated. Saved to: {save_path}")
     plt.show()
 
 
