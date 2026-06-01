@@ -29,8 +29,6 @@ To bypass these fundamental limits, we introduce the **ECL framework**. By restr
   * `simexp4_ablation.py` - Ablation study isolating the "Zero-Speed Paradox"
   * `realexp1.py` - Single-cell RNA velocity inference (Pancreas developmental trajectory)
   * `realexp2.py` - Lagrangian coherence tracking of mesoscale ocean turbulence
-* `data/`
-  * `ocean_5days.csv` - Placeholder for the AVISO satellite altimetry dataset (used in realexp2.py)
 
 ## Dependencies
 
